@@ -1,0 +1,39 @@
+.col_1 {
+    width: 1fr;
+}
+.col_1_5 {
+    width: 1.5fr;
+}
+.col_2 {
+    width: 2fr;
+}
+.col_3 {
+    width: 3fr;
+}
+.col_4 {
+    width: 4fr;
+}
+
+.col_5 {
+    width: 5fr;
+}
+
+.col_5_5 {
+    width: 5.5fr;
+}
+
+.col_6 {
+    width: 6fr;
+}
+
+Screen {
+}
+
+ListView {
+    width: 80;
+    height: auto;
+}
+
+ListItem {
+    height: 1;
+}
