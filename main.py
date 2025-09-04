@@ -5,7 +5,7 @@ import re
 
 from textual.app import App
 from textual.widgets import Header, Footer, Static, Label, ListView, ListItem
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.logging import TextualHandler
 
 logging.basicConfig(
@@ -286,6 +286,8 @@ class PWConnApp(App):
     def compose(self):
         yield Header()
 
+        yield self.render_media_header()
+
         if self.media_type == "audio" and self.pw_info:
             yield self.render_audio()
 
@@ -334,6 +336,19 @@ class PWConnApp(App):
             if item[1] == highlight.item:
                 self.list_selection = i
                 break
+
+    def render_media_header(self):
+        labels = dict(
+            audio="Audio",
+            jack_midi="JACK MIDI",
+            alsa_midi="ALSA MIDI",
+            video="Video"
+        )
+        return Vertical(
+            Static(f"{labels.get(self.media_type)} devices", classes="title"),
+            Static("\[ Open  ] Close  SPC Toggle mark  c Connect marked  d Disconnect marked"),
+            classes="media_header"
+        )
 
     def render_alsa_midi(self):
         devices = [

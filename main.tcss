@@ -26,6 +26,14 @@
     width: 6fr;
 }
 
+.media_header {
+    height: 2;
+}
+
+.title {
+    content-align: center top;
+}
+    
 Screen {
 }
 
