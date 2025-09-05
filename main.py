@@ -21,6 +21,15 @@ INPUT = "-o"
 OUTPUT = "-i"
 
 
+class KeysFooter(Static):
+    def __init__(self, init_string):
+        super().__init__(
+            init_string,
+            classes="keys_footer"
+        )
+
+
+
 def get_alsa_portdir(direction):
     """
     aconnect -l has most of the info we want, but it doesn't
@@ -367,10 +376,10 @@ class PWConnApp(App):
                 need_refresh = True
             elif event.key == "up":
                 self.list_selection = max(0, self.list_selection - 1)
-                need_refresh = True
+                self.update_keys_footer()
             elif event.key == "down":
                 self.list_selection = min(len(self.list_items) - 1, self.list_selection + 1)
-                need_refresh = True
+                self.update_keys_footer()
             elif event.key == "c":
                 self.connect_marked()
                 need_refresh = True
@@ -386,6 +395,7 @@ class PWConnApp(App):
         for i, item in enumerate(self.list_items):
             if item[1] == highlight.item:
                 self.list_selection = i
+                self.update_keys_footer()
                 break
 
     def disconnect_selected(self):
@@ -440,7 +450,8 @@ class PWConnApp(App):
         )
         return Static(f"{labels.get(self.media_type)} devices", classes="title")
 
-    def render_keys_footer(self):
+
+    def keys_footer_content(self):
         keys = [
             ("open", r"\[", "Open"),
             ("close", "]", "Close"),
@@ -475,13 +486,16 @@ class PWConnApp(App):
             if k[0] in actions
         ]
 
-        return Static(
-            '  '.join(
-                f"[bold][#ffa500]{k}[/][/] {cmd}"
-                for tag, k, cmd in active_keys
-            ),
-            classes="keys_footer"
+        return '  '.join(
+            f"[bold][#ffa500]{k}[/][/] {cmd}"
+            for tag, k, cmd in active_keys
         )
+
+    def update_keys_footer(self):
+        self.query_one(KeysFooter).update(self.keys_footer_content())
+
+    def render_keys_footer(self):
+        return KeysFooter(self.keys_footer_content())
 
     def render_alsa_midi(self):
         devices = [
