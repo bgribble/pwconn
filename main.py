@@ -254,6 +254,17 @@ def get_pw_info():
     return info
 
 
+def conn_pairs(num_out, num_in):
+    count = max(num_out, num_in)
+    div_out = num_out / count
+    div_in = num_in / count
+
+    connections = []
+    for conn in range(count):
+        connections.append((int(div_out * conn), int(div_in * conn)))
+    return connections
+
+
 class PWConnApp(App):
     CSS_PATH = "main.tcss"
     AUTO_FOCUS = ".main_list"
@@ -276,9 +287,7 @@ class PWConnApp(App):
         self.expanded_devices = set()
         self.expanded_ports = set()
 
-        self.selected_devices = set()
         self.selected_ports = set()
-        self.selected_conn = set()
 
         self.list_items = []
         self.list_selection = 0
@@ -317,7 +326,7 @@ class PWConnApp(App):
             sel = self.list_items[self.list_selection][0]
             if event.key == "space":
                 if sel.get("object.pwtype") == "port":
-                    key = f"{sel.get('object.id')}:{sel.get('port.direction')}:{sel.get('port.id')}"
+                    key = sel.get('object.id')
                     if key in self.selected_ports:
                         self.selected_ports.remove(key)
                     else:
@@ -354,12 +363,19 @@ class PWConnApp(App):
             elif event.key == "right_curly_bracket":
                 self.expanded_devices = set()
                 self.expanded_ports = set()
+                self.list_selection = 0
                 need_refresh = True
             elif event.key == "up":
                 self.list_selection = max(0, self.list_selection - 1)
                 need_refresh = True
             elif event.key == "down":
                 self.list_selection = min(len(self.list_items) - 1, self.list_selection + 1)
+                need_refresh = True
+            elif event.key == "c":
+                self.connect_marked()
+                need_refresh = True
+            elif event.key == "d":
+                self.disconnect_selected()
                 need_refresh = True
 
         if need_refresh:
@@ -371,6 +387,49 @@ class PWConnApp(App):
             if item[1] == highlight.item:
                 self.list_selection = i
                 break
+
+    def disconnect_selected(self):
+        link = self.list_items[self.list_selection][0]
+        if not link.get("object.pwtype") == "link":
+            return
+
+        output = subprocess.run(
+            ["pw-link", "-d", link.get("object.id")],
+            capture_output=True
+        )
+
+        self.pw_info = get_pw_info()
+        self.alsa_info = get_alsa_info()
+
+    def connect_marked(self):
+        in_ports = []
+        out_ports = []
+
+        logging.debug(f"[connect] selected ports = {self.selected_ports}")
+        for port_id in self.selected_ports:
+            port = self.pw_info.get(port_id)
+            if port.get("port.direction") == "in":
+                in_ports.append(port)
+            elif port.get("port.direction") == "out":
+                out_ports.append(port)
+
+        in_ports.sort(key=lambda p: p.get("port.alias") or p.get("port.name"))
+        out_ports.sort(key=lambda p: p.get("port.alias") or p.get("port.name"))
+
+        pairs = conn_pairs(len(out_ports), len(in_ports))
+
+        for outport_ind, inport_ind in pairs:
+            outport = out_ports[outport_ind]
+            inport = in_ports[inport_ind]
+            output = subprocess.run(
+                ["pw-link", outport.get("object.id"), inport.get("object.id")],
+                capture_output=True
+            )
+
+        self.pw_info = get_pw_info()
+        self.alsa_info = get_alsa_info()
+
+        self.selected_ports = set()
 
     def render_media_header(self):
         labels = dict(
@@ -483,9 +542,8 @@ class PWConnApp(App):
 
     def render_port(self, port, all_items):
         obj_id = port.get("object.id", "")
-        key = f"{obj_id}:{port.get('port.direction')}:{port.get('port.id')}"
         tag = ''
-        if key in self.selected_ports:
+        if obj_id in self.selected_ports:
             tag = '[#00ff00]*[/] '
         items = [(
             port,
@@ -647,21 +705,25 @@ class PWConnApp(App):
     async def action_filter_audio(self):
         self.media_type = "audio"
         self.list_selection = 0
+        self.selected_ports = set()
         await self.redraw()
 
     async def action_filter_jack_midi(self):
         self.media_type = "jack_midi"
         self.list_selection = 0
+        self.selected_ports = set()
         await self.redraw()
 
     async def action_filter_midi(self):
         self.media_type = "alsa_midi"
         self.list_selection = 0
+        self.selected_ports = set()
         await self.redraw()
 
     async def action_filter_video(self):
         self.media_type = "video"
         self.list_selection = 0
+        self.selected_ports = set()
         await self.redraw()
 
     async def action_refresh(self):
