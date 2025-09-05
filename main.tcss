@@ -27,9 +27,12 @@
 }
 
 .media_header {
-    height: 2;
+    height: 1;
 }
 
+.keys_footer {
+    dock: bottom;
+}
 .title {
     content-align: center top;
 }

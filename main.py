@@ -5,7 +5,7 @@ import re
 
 from textual.app import App
 from textual.widgets import Header, Footer, Static, Label, ListView, ListItem
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, Container
 from textual.logging import TextualHandler
 
 logging.basicConfig(
@@ -285,21 +285,26 @@ class PWConnApp(App):
 
     def compose(self):
         yield Header()
-
         yield self.render_media_header()
 
+        content = []
         if self.media_type == "audio" and self.pw_info:
-            yield self.render_audio()
+            content.append(self.render_audio())
 
         elif self.media_type == "jack_midi" and self.pw_info:
-            yield self.render_jack_midi()
+            content.append(self.render_jack_midi())
 
         elif self.media_type == "alsa_midi" and self.alsa_info:
-            yield self.render_alsa_midi()
+            content.append(self.render_alsa_midi())
 
         elif self.media_type == "video" and self.alsa_info:
-            yield self.render_video()
+            content.append(self.render_video())
 
+        content.append(self.render_keys_footer())
+        yield Container(
+            *content,
+            classes="content_container"
+        )
         yield Footer()
 
     def on_mount(self):
@@ -322,10 +327,40 @@ class PWConnApp(App):
                 if sel.get("object.pwtype").startswith("device"):
                     self.expanded_devices.add(sel.get("object.id"))
                     need_refresh = True
+                elif sel.get("object.pwtype").startswith("port"):
+                    self.expanded_ports.add(sel.get("object.id"))
+                    need_refresh = True
             elif event.key == "right_square_bracket":
                 if sel.get("object.pwtype").startswith("device"):
-                    self.expanded_devices.remove(sel.get("object.id"))
+                    if sel.get("object.id") in self.expanded_devices:
+                        self.expanded_devices.remove(sel.get("object.id"))
                     need_refresh = True
+                elif sel.get("object.pwtype").startswith("port"):
+                    if sel.get("object.id") in self.expanded_ports:
+                        self.expanded_ports.remove(sel.get("object.id"))
+                    need_refresh = True
+            elif event.key == "left_curly_bracket":
+                for obj_id, obj in self.pw_info.items():
+                    if obj.get("object.pwtype", "").startswith("device"):
+                        self.expanded_devices.add(obj_id)
+                    elif obj.get("object.pwtype", "") == "port":
+                        self.expanded_ports.add(obj_id)
+                for obj_id, obj in self.alsa_info.items():
+                    if obj.get("object.pwtype", "").startswith("device"):
+                        self.expanded_devices.add(obj_id)
+                    elif obj.get("object.pwtype", "") == "port":
+                        self.expanded_ports.add(obj_id)
+                need_refresh = True
+            elif event.key == "right_curly_bracket":
+                self.expanded_devices = set()
+                self.expanded_ports = set()
+                need_refresh = True
+            elif event.key == "up":
+                self.list_selection = max(0, self.list_selection - 1)
+                need_refresh = True
+            elif event.key == "down":
+                self.list_selection = min(len(self.list_items) - 1, self.list_selection + 1)
+                need_refresh = True
 
         if need_refresh:
             await self.recompose()
@@ -344,10 +379,49 @@ class PWConnApp(App):
             alsa_midi="ALSA MIDI",
             video="Video"
         )
-        return Vertical(
-            Static(f"{labels.get(self.media_type)} devices", classes="title"),
-            Static("\[ Open  ] Close  SPC Toggle mark  c Connect marked  d Disconnect marked"),
-            classes="media_header"
+        return Static(f"{labels.get(self.media_type)} devices", classes="title")
+
+    def render_keys_footer(self):
+        keys = [
+            ("open", r"\[", "Open"),
+            ("close", "]", "Close"),
+            ("openall", r"{", "Open all"),
+            ("closeall", r"}", "Close all"),
+            ("mark", "SPC", "Toggle mark"),
+            ("connect", "c", "Connect marked"),
+            ("disconnect", "d", "Disconnect"),
+        ]
+
+        active_keys = []
+        actions = []
+
+        if self.list_selection is not None:
+            current_item = self.list_items[self.list_selection]
+
+            highlight_type = current_item[0].get("object.pwtype")
+            if highlight_type in (
+                "device_audio", "device_alsa_midi", "device_jack_midi", "device_video"
+            ):
+                actions = ["open", "close", "openall", "closeall"]
+            elif highlight_type == "port":
+                actions = ["open", "close", "openall", "closeall", "mark"]
+            elif highlight_type == "link":
+                actions = ["disconnect"]
+
+        if len(self.selected_ports) > 1:
+            actions.append("connect")
+
+        active_keys = [
+            k for k in keys
+            if k[0] in actions
+        ]
+
+        return Static(
+            '  '.join(
+                f"[bold][#ffa500]{k}[/][/] {cmd}"
+                for tag, k, cmd in active_keys
+            ),
+            classes="keys_footer"
         )
 
     def render_alsa_midi(self):
@@ -375,7 +449,7 @@ class PWConnApp(App):
     def render_video(self):
         devices = [
             obj for id, obj in self.pw_info.items()
-            if (
+                if (
                 obj.get("object.pwtype") == "device_video"
                 and (len(obj.get("node.portgroups", []))
                      or len(obj.get("node.ports", [])))
@@ -407,24 +481,89 @@ class PWConnApp(App):
             classes="main_list"
         )
 
-    def render_port(self, port):
-        key = f"{port.get('object.id')}:{port.get('port.direction')}:{port.get('port.id')}"
+    def render_port(self, port, all_items):
+        obj_id = port.get("object.id", "")
+        key = f"{obj_id}:{port.get('port.direction')}:{port.get('port.id')}"
         tag = ''
         if key in self.selected_ports:
-            tag = ' (*)'
+            tag = '[#00ff00]*[/] '
         items = [(
             port,
             ListItem(
                 Horizontal(
-                    Label(port.get("object.id", ""), classes="col_1"),
+                    Label(obj_id, classes="col_1"),
                     Label("", classes="col_1"),
                     Label(
-                        f"{port.get('port.id', '')}: {port.get('port.name', '')}{tag}",
+                        f"{port.get('port.id', '')}: {tag}{port.get('port.name', '')}",
                         classes="col_5"
                     )
                 )
             )
         )]
+
+        if obj_id in self.expanded_ports:
+            for link_id in sorted(port.get("port.links_in", [])):
+                link = all_items.get(link_id)
+                other_node = all_items.get(link.get("link.input.node"))
+                other_port = all_items.get(link.get("link.input.port"))
+
+                if "device.id" in other_node:
+                    device_node = all_items.get(other_node.get("device.id"))
+                else:
+                    device_node = other_node
+
+                other_node_name = (
+                    device_node.get("device.nick")
+                    or device_node.get("device.name")
+                    or device_node.get("node.name")
+                )
+
+                arrow = "-->"
+                items.append((
+                    link,
+                    ListItem(
+                        Horizontal(
+                            Label(port.get("object.id", ""), classes="col_1"),
+                            Label("", classes="col_1"),
+                            Label(
+                                f" {arrow} {other_node_name}:{other_port.get('port.name')}",
+                                classes="col_5"
+                            )
+                        )
+                    )
+                ))
+
+            for link_id in sorted(port.get("port.links_out", [])):
+                link = all_items.get(link_id)
+                other_node = all_items.get(link.get("link.output.node"))
+                other_port = all_items.get(link.get("link.output.port"))
+
+                if "device.id" in other_node:
+                    device_node = all_items.get(other_node.get("device.id"))
+                else:
+                    device_node = other_node
+
+                other_node_name = (
+                    device_node.get("device.nick")
+                    or device_node.get("device.name")
+                    or device_node.get("node.name")
+                )
+
+                arrow = "<--"
+                items.append((
+                    link,
+                    ListItem(
+                        Horizontal(
+                            Label(port.get("object.id", ""), classes="col_1"),
+                            Label("", classes="col_1"),
+                            Label(
+                                f" {arrow} {other_node_name}:{other_port.get('port.name')}",
+                                classes="col_5"
+                            )
+                        )
+                    )
+                ))
+
         return items
 
     def render_device_item(self, item, all_items):
@@ -466,7 +605,7 @@ class PWConnApp(App):
 
             if in_ports:
                 items.append((
-                    item,
+                    {},
                     ListItem(
                         Horizontal(
                             Label("", classes="col_1_5"),
@@ -475,11 +614,11 @@ class PWConnApp(App):
                     )
                 ))
                 for i in sorted(in_ports, key=lambda p: p.get("port.id")):
-                    items.extend(self.render_port(i))
+                    items.extend(self.render_port(i, all_items))
 
             if out_ports:
                 items.append((
-                    item,
+                    {},
                     ListItem(
                         Horizontal(
                             Label("", classes="col_1_5"),
@@ -488,11 +627,11 @@ class PWConnApp(App):
                     )
                 ))
                 for i in sorted(out_ports, key=lambda p: p.get("port.id")):
-                    items.extend(self.render_port(i))
+                    items.extend(self.render_port(i, all_items))
 
             if mon_ports:
                 items.append((
-                    item,
+                    {},
                     ListItem(
                         Horizontal(
                             Label("", classes="col_1_5"),
@@ -501,24 +640,28 @@ class PWConnApp(App):
                     )
                 ))
                 for i in sorted(mon_ports, key=lambda p: p.get("port.id")):
-                    items.extend(self.render_port(i))
+                    items.extend(self.render_port(i, all_items))
 
         return items
 
     async def action_filter_audio(self):
         self.media_type = "audio"
+        self.list_selection = 0
         await self.redraw()
 
     async def action_filter_jack_midi(self):
         self.media_type = "jack_midi"
+        self.list_selection = 0
         await self.redraw()
 
     async def action_filter_midi(self):
         self.media_type = "alsa_midi"
+        self.list_selection = 0
         await self.redraw()
 
     async def action_filter_video(self):
         self.media_type = "video"
+        self.list_selection = 0
         await self.redraw()
 
     async def action_refresh(self):
