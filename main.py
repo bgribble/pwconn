@@ -4,10 +4,8 @@ pwconn -- text UI for manipulating Pipewire connections
 Copyright (c) Bill Gribble <grib@billgribble.com>
 """
 
-import json
 import logging
 import subprocess
-import re
 
 from textual.app import App
 from textual.widgets import Header, Footer, Static, Label, ListView, ListItem
@@ -32,6 +30,7 @@ class KeysFooter(Static):
             init_string,
             classes="keys_footer"
         )
+
 
 class PWConnApp(App):
     CSS_PATH = "main.tcss"
@@ -162,9 +161,9 @@ class PWConnApp(App):
         if not link.get("object.pwtype") == "link":
             return
 
-        output = subprocess.run(
+        subprocess.run(
             ["pw-link", "-d", link.get("object.id")],
-            capture_output=True
+            capture_output=True, check=True
         )
 
         self.pw_info = get_pw_info()
@@ -190,9 +189,9 @@ class PWConnApp(App):
         for outport_ind, inport_ind in pairs:
             outport = out_ports[outport_ind]
             inport = in_ports[inport_ind]
-            output = subprocess.run(
+            subprocess.run(
                 ["pw-link", outport.get("object.id"), inport.get("object.id")],
-                capture_output=True
+                capture_output=True, check=True
             )
 
         self.pw_info = get_pw_info()
@@ -322,7 +321,6 @@ class PWConnApp(App):
             port,
             ListItem(
                 Horizontal(
-                    Label(obj_id, classes="col_1"),
                     Label("", classes="col_1"),
                     Label(
                         f"{port.get('port.id', '')}: {tag}{port.get('port.name', '')}",
@@ -354,7 +352,6 @@ class PWConnApp(App):
                     link,
                     ListItem(
                         Horizontal(
-                            Label(port.get("object.id", ""), classes="col_1"),
                             Label("", classes="col_1"),
                             Label(
                                 f" {arrow} {other_node_name}:{other_port.get('port.name')}",
@@ -385,7 +382,6 @@ class PWConnApp(App):
                     link,
                     ListItem(
                         Horizontal(
-                            Label(port.get("object.id", ""), classes="col_1"),
                             Label("", classes="col_1"),
                             Label(
                                 f" {arrow} {other_node_name}:{other_port.get('port.name')}",
@@ -403,7 +399,6 @@ class PWConnApp(App):
             item,
             ListItem(
                 Horizontal(
-                    Label(item.get("object.id", ""), classes="col_1"),
                     Label(
                         item.get("device.nick") or item.get("device.name") or item.get("node.name"),
                         classes="col_6"
@@ -419,13 +414,16 @@ class PWConnApp(App):
         ]
 
         if obj_id in self.expanded_devices:
-            ports = [
-                obj for oid, obj in all_items.items()
-                if obj.get("node.id") in node_ids and (
+            ports = []
+            for oid, obj in all_items.items():
+                if obj.get("node.id") not in node_ids:
+                    continue
+                node = all_items.get(obj.get("node_id", obj_id))
+                if (
                     device_type in obj.get("format.dsp", "")
-                    or device_type in obj.get("media.class", "").lower()
-                )
-            ]
+                    or device_type in node.get("media.class", "").lower()
+                ):
+                    ports.append(obj)
 
             in_ports = [
                 p for p in ports if "in" in p.get("port.direction")
@@ -444,7 +442,7 @@ class PWConnApp(App):
                     {},
                     ListItem(
                         Horizontal(
-                            Label("", classes="col_1_5"),
+                            Label("", classes="col_0_5"),
                             Label("input", classes="col_5_5")
                         )
                     )
@@ -457,7 +455,7 @@ class PWConnApp(App):
                     {},
                     ListItem(
                         Horizontal(
-                            Label("", classes="col_1_5"),
+                            Label("", classes="col_0_5"),
                             Label("output", classes="col_5_5")
                         )
                     )
@@ -470,7 +468,7 @@ class PWConnApp(App):
                     {},
                     ListItem(
                         Horizontal(
-                            Label("", classes="col_1_5"),
+                            Label("", classes="col_0_5"),
                             Label("monitor", classes="col_5_5")
                         )
                     )
