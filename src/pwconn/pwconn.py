@@ -4,17 +4,20 @@ pwconn -- text UI for manipulating Pipewire connections
 Copyright (c) Bill Gribble <grib@billgribble.com>
 """
 
+import argparse
 import logging
 import json
 import subprocess
+import shutil
+import sys
 
 from textual.app import App
 from textual.widgets import Header, Footer, Static, Label, ListView, ListItem
 from textual.containers import Horizontal, Container
 from textual.logging import TextualHandler
 
-from alsa_info import get_alsa_info
-from pw_info import get_pw_info, conn_pairs
+from .alsa_info import get_alsa_info
+from .pw_info import get_pw_info, conn_pairs
 
 logging.basicConfig(
     level="NOTSET",
@@ -34,7 +37,7 @@ class KeysFooter(Static):
 
 
 class PWConnApp(App):
-    CSS_PATH = "main.tcss"
+    CSS_PATH = "pwconn.tcss"
     AUTO_FOCUS = ".main_list"
 
     BINDINGS = [
@@ -548,7 +551,62 @@ class PWConnApp(App):
     def action_quit(self):
         self.exit()
 
+description = "pwconn - manage Pipewire connections via text UI"
+footer = """
+To report bugs or download source:
+
+    http://github.com/bgribble/pwconn
+
+Copyright (c) Bill Gribble <grib@billgribble.com>
+
+pwconn is free software, and you are welcome to redistribute it
+under certain conditions.  See the file COPYING for details.
+"""
+
+def main():
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=description, epilog=footer
+    )
+
+    parser.add_argument(
+        "-a", "--audio", action="store_true",
+        help="Initially view audio devices"
+    )
+    parser.add_argument(
+        "-j", "--jack-midi", action="store_true",
+        help="Initially view JACK MIDI devices"
+    )
+    parser.add_argument(
+        "-m", "--alsa-midi", action="store_true",
+        help="Initially view ALSA MIDI devices"
+    )
+    parser.add_argument(
+        "-v", "--video", action="store_true",
+        help="Initially view video devices"
+    )
+
+    # check for pw-link, pw-cli, and aconnect
+    for helper in ("pw-link", "pw-cli", "aconnect"):
+        path = shutil.which(helper)
+        if not path:
+            print(f"pwconn: unable to find helper '{helper}' in $PATH, is it installed?")
+            sys.exit(-1)
+
+    args = vars(parser.parse_args())
+    app = PWConnApp()
+    
+    if args.get("alsa_midi"):
+        app.media_type = "alsa_midi"
+    if args.get("jack_midi"):
+        app.media_type = "jack_midi"
+    if args.get("video"):
+        app.media_type = "video"
+    if args.get("audio"):
+        app.media_type = "audio"
+
+    app.run()
+
 
 if __name__ == "__main__":
-    app = PWConnApp()
-    app.run()
+    main()
