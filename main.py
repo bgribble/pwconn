@@ -5,6 +5,7 @@ Copyright (c) Bill Gribble <grib@billgribble.com>
 """
 
 import logging
+import json
 import subprocess
 
 from textual.app import App
@@ -160,11 +161,23 @@ class PWConnApp(App):
         link = self.list_items[self.list_selection][0]
         if not link.get("object.pwtype") == "link":
             return
+        if self.media_type == "alsa_midi":
+            outport = link.get("link.output.port")
+            inport = link.get("link.input.port")
 
-        subprocess.run(
-            ["pw-link", "-d", link.get("object.id")],
-            capture_output=True, check=True
-        )
+            subprocess.run(
+                [
+                    "aconnect",  "-d",
+                    outport.replace("out:", ""),
+                    inport.replace("in:", ""),
+                ],
+                capture_output=True, check=True
+            )
+        else:
+            subprocess.run(
+                ["pw-link", "-d", link.get("object.id")],
+                capture_output=True, check=True
+            )
 
         self.pw_info = get_pw_info()
         self.alsa_info = get_alsa_info()
@@ -173,9 +186,13 @@ class PWConnApp(App):
         in_ports = []
         out_ports = []
 
-        logging.debug(f"[connect] selected ports = {self.selected_ports}")
+        if self.media_type == "alsa_midi":
+            all_info = self.alsa_info
+        else:
+            all_info = self.pw_info
+
         for port_id in self.selected_ports:
-            port = self.pw_info.get(port_id)
+            port = all_info.get(port_id)
             if port.get("port.direction") == "in":
                 in_ports.append(port)
             elif port.get("port.direction") == "out":
@@ -189,10 +206,21 @@ class PWConnApp(App):
         for outport_ind, inport_ind in pairs:
             outport = out_ports[outport_ind]
             inport = in_ports[inport_ind]
-            subprocess.run(
-                ["pw-link", outport.get("object.id"), inport.get("object.id")],
-                capture_output=True, check=True
-            )
+            if self.media_type == "alsa_midi":
+                subprocess.run(
+                    [
+                        "aconnect",
+                        outport.get("object.id").replace("out:", ""),
+                        inport.get("object.id").replace("in:", ""),
+                    ],
+                    capture_output=True, check=True
+                )
+
+            else:
+                subprocess.run(
+                    ["pw-link", outport.get("object.id"), inport.get("object.id")],
+                    capture_output=True, check=True
+                )
 
         self.pw_info = get_pw_info()
         self.alsa_info = get_alsa_info()
@@ -333,8 +361,12 @@ class PWConnApp(App):
         if obj_id in self.expanded_ports:
             for link_id in sorted(port.get("port.links_in", [])):
                 link = all_items.get(link_id)
+
                 other_node = all_items.get(link.get("link.input.node"))
                 other_port = all_items.get(link.get("link.input.port"))
+
+                if not other_port:
+                    continue
 
                 if "device.id" in other_node:
                     device_node = all_items.get(other_node.get("device.id"))
@@ -365,6 +397,8 @@ class PWConnApp(App):
                 link = all_items.get(link_id)
                 other_node = all_items.get(link.get("link.output.node"))
                 other_port = all_items.get(link.get("link.output.port"))
+                if not other_port:
+                    continue
 
                 if "device.id" in other_node:
                     device_node = all_items.get(other_node.get("device.id"))

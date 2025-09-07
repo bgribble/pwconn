@@ -4,6 +4,7 @@ alsa_info.py -- load info about the alsa sequencer graph using aconnect
 import json
 import subprocess
 import re
+import logging
 
 ALSA_CLIENT = r"^client ([0-9]+): '([^']+)'"
 ALSA_PORT = r"^([0-9]+) '([^']+)'"
@@ -64,8 +65,10 @@ def get_alsa_info():
     current_obj = None
     current_id = None
     current_port = {}
-    connections = None
     ports = {}
+
+    # link lines can reference to clients we haven't seen yet
+    pending_in = []
 
     stdout_str = objlist.stdout.decode("UTF-8")
 
@@ -96,15 +99,12 @@ def get_alsa_info():
                     "ports": ports
                 }
                 current_id = match.group(1)
-                connections = []
 
         # port line
         elif line.startswith("    "):
             key, val = stripline.split(" ", maxsplit=1)
             val = re.sub("'", '"', val)
             obj_key = f"{current_id}:{key}"
-
-            connections = {"to": [], "from": []}
 
             if obj_key in in_ports:
                 obj_id = f"{current_id}:in:{key}"
@@ -115,7 +115,6 @@ def get_alsa_info():
                     "node.id": current_id,
                     "port.direction": "in",
                     "port.name": json.loads(val).strip(),
-                    "connections": connections
                 }
                 node_ports = current_obj.setdefault("node.ports", [])
                 node_ports.append(obj_id)
@@ -133,7 +132,6 @@ def get_alsa_info():
                     "node.id": current_id,
                     "port.direction": "out",
                     "port.name": json.loads(val).strip(),
-                    "connections": connections
                 }
                 node_ports = current_obj.setdefault("node.ports", [])
                 node_ports.append(obj_id)
@@ -149,29 +147,34 @@ def get_alsa_info():
                 direction = match.group(2)
                 connlist = re.sub(r"\[[^]]+\]", "", match.group(3))
                 conninfo = connlist.split(", ")
-                if direction == "From:":
-                    current_port['connections']['from'].extend(conninfo)
-                else:
-                    current_port['connections']['to'].extend(conninfo)
 
                 for link in conninfo:
                     link_obj = {
-                        'object.id': obj_id,
                         'object.pwtype': "link",
                     }
-                    if direction == "From:":
-                        node_id, port_id = link.split(":")
-                        link_obj['link.output.node'] = node_id
-                        link_obj['link.output.port'] = port_id
-                        link_obj['link.input.node'] = current_port['node.id']
-                        link_obj['link.input.port'] = current_port['port.id']
-                    else:
-                        node_id, port_id = link.split(":")
+                    other_port = None
+                    if direction == "To:":
+                        node_id, port_num = link.split(":")
+                        port_id = f"{node_id}:in:{port_num}"
+                        link_id = f"link:{current_port['object.id']}:{port_id}"
+                        link_obj["object.id"] = link_id
+                        pending_in.append((port_id, link_id))
                         link_obj['link.input.node'] = node_id
                         link_obj['link.input.port'] = port_id
                         link_obj['link.output.node'] = current_port['node.id']
-                        link_obj['link.output.port'] = current_port['port.id']
+                        link_obj['link.output.port'] = current_port['object.id']
+                        links = current_port.setdefault("port.links_in", [])
+                        if link_id not in links:
+                            links.append(link_id)
 
-                    links = current_obj.setdefault("port.links", [])
-                    links.append(obj_id)
+                        info[link_id] = link_obj
+    
+    for obj_id, link_id in pending_in:
+        port = info.get(obj_id)
+        if not port:
+            continue
+        links = port.setdefault("port.links_out", [])
+        if link_id not in links:
+            links.append(link_id)
+
     return info

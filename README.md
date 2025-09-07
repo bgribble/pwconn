@@ -5,8 +5,8 @@ you to view, create, and remove connections between Pipewire
 apps. It is a UI wrapper on the command-line utils `pw-cli`,
 `pw-link`, and `aconnect`.
 
-It is under development and not releasable yet, but if you want to play around
-with it much of the functionality is there.
+It is under development and not releasable yet, but if you want
+to play around with it much of the functionality is there.
 
 Requirements:
 * ['uv'](https://github.com/astral-sh/uv) for build/install (I
