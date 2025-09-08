@@ -2,7 +2,17 @@
 name = "pwconn"
 version = "0.1.0"
 description = "Manage Pipewire connections via a TUI"
+authors = [
+    { name="Bill Gribble", email="grib@billgribble.com" }
+]
+license = "GPL-2.0+"
 readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Programming Language :: Python",
+    "Topic :: Multimedia :: Sound/Audio"
+]
 requires-python = ">=3.13"
 dependencies = [
     "textual>=5.3.0",
