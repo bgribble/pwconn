@@ -19,8 +19,17 @@ Requirements:
 
 #### Build/install
 
-I haven't built out a proper script wrapper yet. For now, just
-launch the project from the source tree with `uv run ./main.py`
+I haven't uploaded to pypi yet. For now, options are:
+
+* Launch the project from the source tree with `uv run pwconn`
+* Install from source locally
+    * Build wheel with `uv build`
+    * Optional: create and activate a virtualenv for the install
+        * `python3 -m venv <destination>`
+        * `. <destination>/bin/activate`
+    * Install the wheel with `pip install dist/pwconn-0.1.0-py3-none-any.whl`
+    * Launch as `pwconn`
+
 
 #### Usage
 
