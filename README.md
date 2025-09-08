@@ -5,8 +5,8 @@ you to view, create, and remove connections between Pipewire
 apps. It is a UI wrapper on the command-line utils `pw-cli`,
 `pw-link`, and `aconnect`.
 
-It is under development and not releasable yet, but if you want
-to play around with it much of the functionality is there.
+It is under development and not that pretty yet, but if you want
+to play around with it most of the functionality is there.
 
 Requirements:
 * ['uv'](https://github.com/astral-sh/uv) for build/install (I
@@ -19,8 +19,9 @@ Requirements:
 
 #### Build/install
 
-I haven't uploaded to pypi yet. For now, options are:
+The options are:
 
+* Install latest release from PyPI: `pip install pwconn`
 * Launch the project from the source tree with `uv run pwconn`
 * Install from source locally
     * Build wheel with `uv build`
