@@ -5,7 +5,7 @@ description = "Manage Pipewire connections via a TUI"
 authors = [
     { name="Bill Gribble", email="grib@billgribble.com" }
 ]
-license = "GPL-2.0+"
+license = "GPL-2.0"
 readme = "README.md"
 classifiers = [
     "Development Status :: 3 - Alpha",
