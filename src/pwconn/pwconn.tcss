@@ -46,6 +46,14 @@
     dock: bottom;
 }
 
+.device_line {
+    background: $panel;
+}
+
+.device_line.highlighted_item {
+    background: $primary;
+}
+
 .title {
     content-align: center top;
     background: $surface;
@@ -53,6 +61,8 @@
     
 Screen {
 }
+
+
 
 ListView {
     width: 100%;

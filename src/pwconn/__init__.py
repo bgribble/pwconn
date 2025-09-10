@@ -1,1 +1,1 @@
-from .pwconn import main
+from .pwconn import main, PWConnApp

@@ -158,7 +158,9 @@ class PWConnApp(App):
             if item[1] == highlight.item:
                 self.list_selection = i
                 self.update_keys_footer()
-                break
+                item[1].add_class("highlighted_item")
+            else:
+                item[1].remove_class("highlighted_item")
 
     def disconnect_selected(self):
         link = self.list_items[self.list_selection][0]
@@ -345,6 +347,10 @@ class PWConnApp(App):
 
     def render_port(self, port, all_items):
         obj_id = port.get("object.id", "")
+        links_in = port.get("port.links_in", [])
+        links_out = port.get("port.links_out", [])
+        link_count = len(links_in) + len(links_out)
+
         tag = ''
         if obj_id in self.selected_ports:
             tag = '[$warning]*[/] '
@@ -355,7 +361,11 @@ class PWConnApp(App):
                     Label("", classes="col_1"),
                     Label(
                         f"{port.get('port.id', '')}: {tag}{port.get('port.name', '')}",
-                        classes="col_5"
+                        classes="col_2"
+                    ),
+                    Label(
+                        f"[{link_count}]",
+                        classes="col_3"
                     )
                 )
             )
@@ -432,48 +442,57 @@ class PWConnApp(App):
 
     def render_device_item(self, item, device_type, all_items):
         obj_id = item.get("object.id")
-        items = [(
-            item,
-            ListItem(
-                Horizontal(
-                    Label(
-                        item.get("device.nick") or item.get("device.name") or item.get("node.name"),
-                        classes="col_6"
-                    )
-                )
-            )
-        )]
-
         node_ids = [obj_id] + [
             oid
             for oid, obj in all_items.items()
             if obj.get("device.id") == obj_id and obj.get("media.class")
         ]
 
+        ports = []
+        for oid, obj in all_items.items():
+            if obj.get("node.id") not in node_ids:
+                continue
+            node = all_items.get(obj.get("node_id", obj_id))
+            if (
+                device_type in obj.get("format.dsp", "")
+                or device_type in node.get("media.class", "").lower()
+            ):
+                ports.append(obj)
+
+        in_ports = [
+            p for p in ports if "in" in p.get("port.direction")
+        ]
+        in_desc = f"{len(in_ports)} in" if len(in_ports) else ""
+        out_ports = [
+            p for p in ports
+            if "out" in p.get("port.direction") and not p.get("port.monitor") == "true"
+        ]
+        out_desc = f"{len(out_ports)} out" if len(out_ports) else ""
+        mon_ports = [
+            p for p in ports
+            if "out" in p.get("port.direction") and p.get("port.monitor") == "true"
+        ]
+        mon_desc = f"{len(mon_ports)} mon" if len(mon_ports) else ""
+        port_desc = [f for f in (in_desc, out_desc, mon_desc) if f]
+        items = [(
+            item,
+            ListItem(
+                Horizontal(
+                    Label(
+                        item.get("device.nick") or item.get("device.name") or item.get("node.name"),
+                        classes="col_2"
+                    ),
+                    Label(
+                        f"({'/'.join(port_desc)})",
+                        classes="col_4"
+                    )
+                ), 
+                classes="device_line"
+            )
+        )]
+
+
         if obj_id in self.expanded_devices:
-            ports = []
-            for oid, obj in all_items.items():
-                if obj.get("node.id") not in node_ids:
-                    continue
-                node = all_items.get(obj.get("node_id", obj_id))
-                if (
-                    device_type in obj.get("format.dsp", "")
-                    or device_type in node.get("media.class", "").lower()
-                ):
-                    ports.append(obj)
-
-            in_ports = [
-                p for p in ports if "in" in p.get("port.direction")
-            ]
-            out_ports = [
-                p for p in ports
-                if "out" in p.get("port.direction") and not p.get("port.monitor") == "true"
-            ]
-            mon_ports = [
-                p for p in ports
-                if "out" in p.get("port.direction") and p.get("port.monitor") == "true"
-            ]
-
             if in_ports:
                 items.append((
                     {},
@@ -513,6 +532,7 @@ class PWConnApp(App):
                 for i in sorted(mon_ports, key=lambda p: p.get("port.id")):
                     items.extend(self.render_port(i, all_items))
 
+        logging.debug(f"[DEVICE] items: {items}")
         return items
 
     async def action_filter_audio(self):
