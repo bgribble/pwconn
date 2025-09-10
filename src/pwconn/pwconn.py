@@ -63,6 +63,7 @@ class PWConnApp(App):
         self.list_items = []
         self.list_selection = 0
 
+
     def compose(self):
         yield Header()
         yield self.render_media_header()
@@ -87,9 +88,11 @@ class PWConnApp(App):
         )
         yield Footer()
 
+
     def on_mount(self):
         self.title = "pwconn"
         self.sub_title = "Manage Pipewire connections"
+
 
     async def on_key(self, event):
         need_refresh = False
@@ -339,6 +342,8 @@ class PWConnApp(App):
                 self.render_device_item(i, device_type, all_items)
             )
         self.list_items = device_items
+        self.list_selection = max(0, min(self.list_selection, len(self.list_items)-1))
+
         return ListView(
             *[d[1] for d in device_items],
             initial_index=self.list_selection,
@@ -486,7 +491,7 @@ class PWConnApp(App):
                         f"({'/'.join(port_desc)})",
                         classes="col_4"
                     )
-                ), 
+                ),
                 classes="device_line"
             )
         )]
@@ -532,7 +537,6 @@ class PWConnApp(App):
                 for i in sorted(mon_ports, key=lambda p: p.get("port.id")):
                     items.extend(self.render_port(i, all_items))
 
-        logging.debug(f"[DEVICE] items: {items}")
         return items
 
     async def action_filter_audio(self):
@@ -615,7 +619,7 @@ def main():
 
     args = vars(parser.parse_args())
     app = PWConnApp()
-    
+
     if args.get("alsa_midi"):
         app.media_type = "alsa_midi"
     if args.get("jack_midi"):
