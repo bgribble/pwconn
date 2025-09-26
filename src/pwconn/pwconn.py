@@ -98,31 +98,33 @@ class PWConnApp(App):
         need_refresh = False
         if hasattr(event, 'key'):
             sel = self.list_items[self.list_selection][0]
-            if event.key == "space":
-                if sel.get("object.pwtype") == "port":
-                    key = sel.get('object.id')
-                    if key in self.selected_ports:
-                        self.selected_ports.remove(key)
-                    else:
-                        self.selected_ports.add(key)
-                    need_refresh = True
-            elif event.key == "left_square_bracket":
-                if sel.get("object.pwtype").startswith("device"):
-                    self.expanded_devices.add(sel.get("object.id"))
-                    need_refresh = True
-                elif sel.get("object.pwtype").startswith("port"):
-                    self.expanded_ports.add(sel.get("object.id"))
-                    need_refresh = True
-            elif event.key == "right_square_bracket":
-                if sel.get("object.pwtype").startswith("device"):
-                    if sel.get("object.id") in self.expanded_devices:
-                        self.expanded_devices.remove(sel.get("object.id"))
-                    need_refresh = True
-                elif sel.get("object.pwtype").startswith("port"):
-                    if sel.get("object.id") in self.expanded_ports:
-                        self.expanded_ports.remove(sel.get("object.id"))
-                    need_refresh = True
-            elif event.key == "left_curly_bracket":
+
+            if "object.pwtype" in sel:
+                if event.key == "space":
+                    if sel.get("object.pwtype") == "port":
+                        key = sel.get('object.id')
+                        if key in self.selected_ports:
+                            self.selected_ports.remove(key)
+                        else:
+                            self.selected_ports.add(key)
+                        need_refresh = True
+                elif event.key == "left_square_bracket":
+                    if sel.get("object.pwtype").startswith("device"):
+                        self.expanded_devices.add(sel.get("object.id"))
+                        need_refresh = True
+                    elif sel.get("object.pwtype").startswith("port"):
+                        self.expanded_ports.add(sel.get("object.id"))
+                        need_refresh = True
+                elif event.key == "right_square_bracket":
+                    if sel.get("object.pwtype").startswith("device"):
+                        if sel.get("object.id") in self.expanded_devices:
+                            self.expanded_devices.remove(sel.get("object.id"))
+                        need_refresh = True
+                    elif sel.get("object.pwtype").startswith("port"):
+                        if sel.get("object.id") in self.expanded_ports:
+                            self.expanded_ports.remove(sel.get("object.id"))
+                        need_refresh = True
+            if event.key == "left_curly_bracket":
                 for obj_id, obj in self.pw_info.items():
                     if obj.get("object.pwtype", "").startswith("device"):
                         self.expanded_devices.add(obj_id)
@@ -206,9 +208,14 @@ class PWConnApp(App):
             elif port.get("port.direction") == "out":
                 out_ports.append(port)
 
+        if not len(in_ports) or not len(out_ports):
+            return
+
         in_ports.sort(key=lambda p: p.get("port.alias") or p.get("port.name"))
         out_ports.sort(key=lambda p: p.get("port.alias") or p.get("port.name"))
 
+        self.expanded_ports |= set([p.get('object.id') for p in (in_ports + out_ports)])
+        
         pairs = conn_pairs(len(out_ports), len(in_ports))
 
         for outport_ind, inport_ind in pairs:
