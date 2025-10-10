@@ -111,7 +111,7 @@ def get_alsa_info():
                 port_obj = {
                     "object.pwtype": "port",
                     "object.id": obj_id,
-                    "port.id": f"in:{key}",
+                    "port.id": f"{key}",
                     "node.id": current_id,
                     "port.direction": "in",
                     "port.name": json.loads(val).strip(),
@@ -128,7 +128,7 @@ def get_alsa_info():
                 port_obj = {
                     "object.pwtype": "port",
                     "object.id": obj_id,
-                    "port.id": f"out:{key}",
+                    "port.id": f"{key}",
                     "node.id": current_id,
                     "port.direction": "out",
                     "port.name": json.loads(val).strip(),

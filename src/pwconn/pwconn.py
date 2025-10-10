@@ -6,7 +6,6 @@ Copyright (c) Bill Gribble <grib@billgribble.com>
 
 import argparse
 import logging
-import json
 import subprocess
 import shutil
 import sys
@@ -23,6 +22,33 @@ logging.basicConfig(
     level="NOTSET",
     handlers=[TextualHandler()],
 )
+
+def import_to_tree(tree, device_info):
+    # find devices first
+    devices = {
+        id_key: obj for id_key, obj in device_info.items()
+        if (
+            "device" in obj.get("object.pwtype", "")
+            and (
+                len(obj.get("node.portgroups", []))
+                or len(obj.get("node.ports", []))
+            )
+        )
+    }
+    for device_id, device in devices.items():
+        port_ids = device.get("node.ports", [])
+
+        group_ids = device.get("node.portgroups", [])
+        for group_id in group_ids:
+            if group_id in device_info:
+                group = device_info.get(group_id)
+                port_ids.extend(group.get("node.ports", []))
+
+        device["node.ports"] = [
+            device_info.get(port_id)
+            for port_id in port_ids if port_id in device_info
+        ]
+        tree[device_id] = device
 
 
 class KeysFooter(Static):
@@ -52,8 +78,6 @@ class PWConnApp(App):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.media_type = "audio"
-        self.pw_info = get_pw_info()
-        self.alsa_info = get_alsa_info()
 
         self.expanded_devices = set()
         self.expanded_ports = set()
@@ -63,6 +87,21 @@ class PWConnApp(App):
         self.list_items = []
         self.list_selection = 0
 
+        self.pw_info = None
+        self.alsa_info = None
+        self.device_info = {}
+
+        self.update_info()
+
+    def update_info(self):
+        import json
+        self.pw_info = get_pw_info()
+        self.alsa_info = get_alsa_info()
+
+        tree = {}
+        import_to_tree(tree, self.pw_info)
+        import_to_tree(tree, self.alsa_info)
+        self.device_info = tree
 
     def compose(self):
         yield Header()
@@ -78,7 +117,7 @@ class PWConnApp(App):
         elif self.media_type == "alsa_midi" and self.alsa_info:
             content.append(self.render_alsa_midi())
 
-        elif self.media_type == "video" and self.alsa_info:
+        elif self.media_type == "video" and self.pw_info:
             content.append(self.render_video())
 
         content.append(self.render_keys_footer())
@@ -88,11 +127,9 @@ class PWConnApp(App):
         )
         yield Footer()
 
-
     def on_mount(self):
         self.title = "pwconn"
         self.sub_title = "Manage Pipewire connections"
-
 
     async def on_key(self, event):
         need_refresh = False
@@ -107,7 +144,7 @@ class PWConnApp(App):
                             self.selected_ports.remove(key)
                         else:
                             self.selected_ports.add(key)
-                        need_refresh = True
+                        self.update_port_label(sel)
                 elif event.key == "left_square_bracket":
                     if sel.get("object.pwtype").startswith("device"):
                         self.expanded_devices.add(sel.get("object.id"))
@@ -158,7 +195,7 @@ class PWConnApp(App):
             await self.recompose()
             self.query_one(ListView).focus()
 
-    def on_list_view_highlighted(self, highlight):
+    async def on_list_view_highlighted(self, highlight):
         for i, item in enumerate(self.list_items):
             if item[1] == highlight.item:
                 self.list_selection = i
@@ -189,8 +226,7 @@ class PWConnApp(App):
                 capture_output=True, check=True
             )
 
-        self.pw_info = get_pw_info()
-        self.alsa_info = get_alsa_info()
+        self.update_info()
 
     def connect_marked(self):
         in_ports = []
@@ -215,7 +251,7 @@ class PWConnApp(App):
         out_ports.sort(key=lambda p: p.get("port.alias") or p.get("port.name"))
 
         self.expanded_ports |= set([p.get('object.id') for p in (in_ports + out_ports)])
-        
+
         pairs = conn_pairs(len(out_ports), len(in_ports))
 
         for outport_ind, inport_ind in pairs:
@@ -237,8 +273,7 @@ class PWConnApp(App):
                     capture_output=True, check=True
                 )
 
-        self.pw_info = get_pw_info()
-        self.alsa_info = get_alsa_info()
+        self.update_info()
 
         self.selected_ports = set()
 
@@ -250,7 +285,6 @@ class PWConnApp(App):
             video="Video"
         )
         return Static(f"{labels.get(self.media_type)} devices", classes="title")
-
 
     def keys_footer_content(self):
         keys = [
@@ -292,58 +326,69 @@ class PWConnApp(App):
             for tag, k, cmd in active_keys
         )
 
+
     def update_keys_footer(self):
         self.query_one(KeysFooter).update(self.keys_footer_content())
+
+    def update_port_label(self, port):
+        self.query_one(
+            f"#port_label_{port.get('object.id')}".replace(':', "_")
+        ).update(self.port_label_content(port))
 
     def render_keys_footer(self):
         return KeysFooter(self.keys_footer_content())
 
     def render_alsa_midi(self):
         devices = [
-            obj for id, obj in self.alsa_info.items()
-            if (
-                "device_alsa_midi" in obj.get("object.pwtype")
-                and (len(obj.get("node.portgroups", []))
-                     or len(obj.get("node.ports", [])))
-            )
+            obj for id, obj in self.device_info.items()
+            if "device_alsa_midi" in obj.get("object.pwtype")
         ]
         return self.render_device_list(devices, "", self.alsa_info)
 
     def render_jack_midi(self):
         devices = [
-            obj for id, obj in self.pw_info.items()
-            if (
-                "device_jack_midi" in obj.get("object.pwtype", "")
-                and (len(obj.get("node.portgroups", []))
-                     or len(obj.get("node.ports", [])))
-            )
+            obj for id, obj in self.device_info.items()
+            if "device_jack_midi" in obj.get("object.pwtype", "")
         ]
         return self.render_device_list(devices, "midi", self.pw_info)
 
     def render_video(self):
         devices = [
-            obj for id, obj in self.pw_info.items()
-            if (
-                "device_video" in obj.get("object.pwtype", "")
-                and (len(obj.get("node.portgroups", []))
-                     or len(obj.get("node.ports", [])))
-            )
+            obj for id, obj in self.device_info.items()
+            if "device_video" in obj.get("object.pwtype", "")
         ]
         return self.render_device_list(devices, "video", self.pw_info)
 
+
     def render_audio(self):
         devices = [
-            obj for id, obj in self.pw_info.items()
-            if (
-                "device_audio" in obj.get("object.pwtype", "")
-                and (len(obj.get("node.portgroups", []))
-                     or len(obj.get("node.ports", [])))
-            )
+            obj for id, obj in self.device_info.items()
+            if "device_audio" in obj.get("object.pwtype", "")
         ]
         return self.render_device_list(devices, "audio", self.pw_info)
 
+
     def render_device_list(self, devices, device_type, all_items):
-        device_items = []
+        device_items = [(
+            {},
+            ListItem(
+                Horizontal(
+                    Label(
+                        "[bold]Name[/]",
+                        classes="col_2"
+                    ),
+                    Label(
+                        "[bold]Ports[/]",
+                        classes="col_2"
+                    ),
+                    Label(
+                        "[bold]Connections[/]",
+                        classes="col_2"
+                    )
+                ),
+                classes="device_line"
+            )
+        )]
         for i in sorted(devices, key=lambda i: int(i.get("object.id"), 0)):
             device_items.extend(
                 self.render_device_item(i, device_type, all_items)
@@ -357,27 +402,32 @@ class PWConnApp(App):
             classes="main_list"
         )
 
+    def port_label_content(self, port):
+        tag = ''
+        obj_id = port.get('object.id')
+        if obj_id in self.selected_ports:
+            tag = '[$warning]*[/] '
+        return f"{port.get('port.id', '')}: {tag}{port.get('port.name', '')}"
+
     def render_port(self, port, all_items):
         obj_id = port.get("object.id", "")
         links_in = port.get("port.links_in", [])
         links_out = port.get("port.links_out", [])
         link_count = len(links_in) + len(links_out)
 
-        tag = ''
-        if obj_id in self.selected_ports:
-            tag = '[$warning]*[/] '
         items = [(
             port,
             ListItem(
                 Horizontal(
                     Label("", classes="col_1"),
                     Label(
-                        f"{port.get('port.id', '')}: {tag}{port.get('port.name', '')}",
-                        classes="col_2"
+                        self.port_label_content(port),
+                        classes="col_3",
+                        id=f"port_label_{obj_id}".replace(':', "_")
                     ),
                     Label(
                         f"[{link_count}]",
-                        classes="col_3"
+                        classes="col_2"
                     )
                 )
             )
@@ -454,22 +504,16 @@ class PWConnApp(App):
 
     def render_device_item(self, item, device_type, all_items):
         obj_id = item.get("object.id")
-        node_ids = [obj_id] + [
-            oid
-            for oid, obj in all_items.items()
-            if obj.get("device.id") == obj_id and obj.get("media.class")
-        ]
+        ports = item.get("node.ports")
 
-        ports = []
-        for oid, obj in all_items.items():
-            if obj.get("node.id") not in node_ids:
-                continue
-            node = all_items.get(obj.get("node_id", obj_id))
-            if (
-                device_type in obj.get("format.dsp", "")
-                or device_type in node.get("media.class", "").lower()
-            ):
-                ports.append(obj)
+        conn_in = sum(
+            len(p.get("port.links_out", []))
+            for p in ports
+        )
+        conn_out = sum(
+            len(p.get("port.links_in", []))
+            for p in ports
+        )
 
         in_ports = [
             p for p in ports if "in" in p.get("port.direction")
@@ -485,7 +529,9 @@ class PWConnApp(App):
             if "out" in p.get("port.direction") and p.get("port.monitor") == "true"
         ]
         mon_desc = f"{len(mon_ports)} mon" if len(mon_ports) else ""
-        port_desc = [f for f in (in_desc, out_desc, mon_desc) if f]
+        port_desc = f"({'/'.join([f for f in (in_desc, out_desc, mon_desc) if f])})"
+        conn_desc = f'[{conn_in} in/{conn_out} out]'
+
         items = [(
             item,
             ListItem(
@@ -495,14 +541,17 @@ class PWConnApp(App):
                         classes="col_2"
                     ),
                     Label(
-                        f"({'/'.join(port_desc)})",
-                        classes="col_4"
+                        port_desc,
+                        classes="col_2"
+                    ),
+                    Label(
+                        conn_desc,
+                        classes="col_2"
                     )
                 ),
                 classes="device_line"
             )
         )]
-
 
         if obj_id in self.expanded_devices:
             if in_ports:
@@ -515,7 +564,7 @@ class PWConnApp(App):
                         )
                     )
                 ))
-                for i in sorted(in_ports, key=lambda p: p.get("port.id")):
+                for i in sorted(in_ports, key=lambda p: int(p.get("port.id"))):
                     items.extend(self.render_port(i, all_items))
 
             if out_ports:
@@ -528,7 +577,7 @@ class PWConnApp(App):
                         )
                     )
                 ))
-                for i in sorted(out_ports, key=lambda p: p.get("port.id")):
+                for i in sorted(out_ports, key=lambda p: int(p.get("port.id"))):
                     items.extend(self.render_port(i, all_items))
 
             if mon_ports:
@@ -541,7 +590,7 @@ class PWConnApp(App):
                         )
                     )
                 ))
-                for i in sorted(mon_ports, key=lambda p: p.get("port.id")):
+                for i in sorted(mon_ports, key=lambda p: int(p.get("port.id"))):
                     items.extend(self.render_port(i, all_items))
 
         return items
@@ -571,8 +620,7 @@ class PWConnApp(App):
         await self.redraw()
 
     async def action_refresh(self):
-        self.pw_info = get_pw_info()
-        self.alsa_info = get_alsa_info()
+        self.update_info()
         await self.redraw()
 
     async def redraw(self):
@@ -637,7 +685,6 @@ def main():
         app.media_type = "audio"
 
     app.run()
-
 
 if __name__ == "__main__":
     main()
