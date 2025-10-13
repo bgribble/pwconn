@@ -1,6 +1,6 @@
 [project]
 name = "pwconn"
-version = "0.4.0"
+version = "0.5.0"
 description = "Manage Pipewire connections via a TUI"
 authors = [
     { name="Bill Gribble", email="grib@billgribble.com" }

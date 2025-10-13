@@ -212,19 +212,25 @@ class PWConnApp(App):
             outport = link.get("link.output.port")
             inport = link.get("link.input.port")
 
-            subprocess.run(
-                [
-                    "aconnect",  "-d",
-                    outport.replace("out:", ""),
-                    inport.replace("in:", ""),
-                ],
-                capture_output=True, check=True
-            )
+            try:
+                subprocess.run(
+                    [
+                        "aconnect",  "-d",
+                        outport.replace("out:", ""),
+                        inport.replace("in:", ""),
+                    ],
+                    capture_output=True, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                logging.debug("disconnect: Failed to run aconnect -d")
         else:
-            subprocess.run(
-                ["pw-link", "-d", link.get("object.id")],
-                capture_output=True, check=True
-            )
+            try:
+                subprocess.run(
+                    ["pw-link", "-d", link.get("object.id")],
+                    capture_output=True, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                logging.debug("disconnect: Failed to run pw-link -d")
 
         self.update_info()
 
@@ -510,10 +516,14 @@ class PWConnApp(App):
             len(p.get("port.links_out", []))
             for p in ports
         )
+        if conn_in > 0:
+            conn_in = f"[bold]{conn_in}[/]"
         conn_out = sum(
             len(p.get("port.links_in", []))
             for p in ports
         )
+        if conn_out > 0:
+            conn_out = f"[bold]{conn_out}[/]"
 
         in_ports = [
             p for p in ports
@@ -542,7 +552,7 @@ class PWConnApp(App):
         ]
         mon_desc = f"{len(mon_ports)} mon" if len(mon_ports) else ""
         port_desc = f"({'/'.join([f for f in (in_desc, out_desc, mon_desc) if f])})"
-        conn_desc = f'[{conn_in} in/{conn_out} out]'
+        conn_desc = f'\\[{conn_in} in/{conn_out} out]'
 
         items = [(
             item,

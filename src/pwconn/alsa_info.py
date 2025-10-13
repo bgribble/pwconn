@@ -140,7 +140,6 @@ def get_alsa_info():
                 ports[key] = port_obj
 
                 info[obj_id] = port_obj
-                current_port = port_obj
 
         # connection line
         else:
