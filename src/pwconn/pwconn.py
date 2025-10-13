@@ -263,22 +263,25 @@ class PWConnApp(App):
         for outport_ind, inport_ind in pairs:
             outport = out_ports[outport_ind]
             inport = in_ports[inport_ind]
-            if self.media_type == "alsa_midi":
-                subprocess.run(
-                    [
-                        "aconnect",
-                        outport.get("object.id").replace("out:", ""),
-                        inport.get("object.id").replace("in:", ""),
-                    ],
-                    capture_output=True, check=True
-                )
+            try:
+                if self.media_type == "alsa_midi":
+                    subprocess.run(
+                        [
+                            "aconnect",
+                            outport.get("object.id").replace("out:", ""),
+                            inport.get("object.id").replace("in:", ""),
+                        ],
+                        capture_output=True, check=True
+                    )
 
-            else:
-                subprocess.run(
-                    ["pw-link", outport.get("object.id"), inport.get("object.id")],
-                    capture_output=True, check=True
-                )
+                else:
+                    subprocess.run(
+                        ["pw-link", outport.get("object.id"), inport.get("object.id")],
+                        capture_output=True, check=True
+                    )
 
+            except subprocess.CalledProcessError as e:
+                logging.debug("connect: Failed to connect ports")
         self.update_info()
 
         self.selected_ports = set()
