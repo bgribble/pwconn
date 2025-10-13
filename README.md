@@ -8,6 +8,8 @@ apps. It is a UI wrapper on the command-line utils `pw-cli`,
 It is under development and not that pretty yet, but if you want
 to play around with it most of the functionality is there.
 
+<img width="1227" height="757" alt="pwconn-screenshot" src="https://github.com/user-attachments/assets/9b51e74b-c285-4504-a1fb-c2ef20df0310" />
+
 Requirements:
 * ['uv'](https://github.com/astral-sh/uv) for build/install (I
   wanted to give it a try, seems ok but jury is still out)
