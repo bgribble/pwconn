@@ -55,3 +55,8 @@ displayed
   is generally OK. If not, make the connections one at a time.
 
 * To disconnect, select a link (from either "end") and type "d"
+
+* If a "connect" or "disconnect" action does not appear to do anything,
+  this is probably an error in the underlying operation that isn't reflected
+  in the UI. In particular, ALSA MIDI connections may not be deleteable by
+  a process that did not create them.
