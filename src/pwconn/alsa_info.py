@@ -4,7 +4,6 @@ alsa_info.py -- load info about the alsa sequencer graph using aconnect
 import json
 import subprocess
 import re
-import logging
 
 ALSA_CLIENT = r"^client ([0-9]+): '([^']+)'"
 ALSA_PORT = r"^([0-9]+) '([^']+)'"
@@ -106,14 +105,16 @@ def get_alsa_info():
             val = re.sub("'", '"', val)
             obj_key = f"{current_id}:{key}"
 
-            if obj_key in in_ports:
-                obj_id = f"{current_id}:in:{key}"
+            current_port = None
+            if obj_key in out_ports:
+                obj_id = f"{current_id}:out:{key}"
                 port_obj = {
                     "object.pwtype": "port",
                     "object.id": obj_id,
                     "port.id": f"{key}",
                     "node.id": current_id,
-                    "port.direction": "in",
+                    "port.type": "midi",
+                    "port.direction": "out",
                     "port.name": json.loads(val).strip(),
                 }
                 node_ports = current_obj.setdefault("node.ports", [])
@@ -123,14 +124,15 @@ def get_alsa_info():
                 info[obj_id] = port_obj
                 current_port = port_obj
 
-            if obj_key in out_ports:
-                obj_id = f"{current_id}:out:{key}"
+            if obj_key in in_ports or not current_port:
+                obj_id = f"{current_id}:in:{key}"
                 port_obj = {
                     "object.pwtype": "port",
                     "object.id": obj_id,
                     "port.id": f"{key}",
+                    "port.type": "midi",
                     "node.id": current_id,
-                    "port.direction": "out",
+                    "port.direction": "in",
                     "port.name": json.loads(val).strip(),
                 }
                 node_ports = current_obj.setdefault("node.ports", [])
@@ -147,6 +149,9 @@ def get_alsa_info():
                 direction = match.group(2)
                 connlist = re.sub(r"\[[^]]+\]", "", match.group(3))
                 conninfo = connlist.split(", ")
+
+                if not current_port:
+                    continue
 
                 for link in conninfo:
                     link_obj = {
@@ -168,7 +173,7 @@ def get_alsa_info():
                             links.append(link_id)
 
                         info[link_id] = link_obj
-    
+
     for obj_id, link_id in pending_in:
         port = info.get(obj_id)
         if not port:
