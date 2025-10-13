@@ -4,45 +4,62 @@ pw_info.py -- load information about the Pipewire graph using pw-cli
 
 import json
 import subprocess
+import logging
 
+def pw_type(obj):
+    if (
+        ("media.type" in obj and obj["media.type"] == "Audio")
+        or ("media.class" in obj and obj["media.class"] == "Audio/Device")
+    ):
+        return "device_audio"
+    elif (
+       "media.class" in obj and obj["media.class"].startswith("Midi")
+    ):
+        return "device_jack_midi"
+    elif (
+       "media.class" in obj and obj["media.class"] == "Video/Device"
+    ):
+        return "device_video"
+    elif "port.id" in obj:
+        return "port"
+    elif "media.class" in obj and obj["media.class"] in (
+        "Audio/Source", "Audio/Sink", "Video/Source", "Video/Sink"
+    ):
+        return "portgroup"
+    elif "link.output.port" in obj:
+        return "link"
+    elif "Client" in obj.get("object.type", ""):
+        return "client"
+    else:
+        return "unknown"
 
 def annotate_pw_info(info):
     for obj_id, obj in info.items():
-        if (
-            ("media.type" in obj and obj["media.type"] == "Audio")
-            or ("media.class" in obj and obj["media.class"] == "Audio/Device")
-        ):
-            obj["object.pwtype"] = "device_audio"
-        elif (
-           "media.class" in obj and obj["media.class"].startswith("Midi")
-        ):
-            obj["object.pwtype"] = "device_jack_midi"
-        elif (
-           "media.class" in obj and obj["media.class"] == "Video/Device"
-        ):
-            obj["object.pwtype"] = "device_video"
+        obj["object.pwtype"] = pw_type(obj)
+
+        if obj["object.pwtype"] == "device_video":
             obj["device.nick"] = obj["device.description"]
-        elif "port.id" in obj:
-            obj["object.pwtype"] = "port"
+        elif obj["object.pwtype"] == "port":
             node = info.get(obj['node.id'])
             ports = node.setdefault('node.ports', [])
             ports.append(obj_id)
 
-            # JACK MIDI ports are sometimes connected to 
+            node_type = pw_type(node)
+            obj['port.type'] = "audio"
+            if "midi" in node_type:
+                obj['port.type'] = "midi"
+
+            # JACK MIDI ports are sometimes connected to
             # nodes that are media.type Audio along with legit audio ports
             # (but not always)
             if obj.get("format.dsp") == "8 bit raw midi" and node.get("media.type") == "Audio":
                 node["object.pwtype"] = "device_audio device_jack_midi"
-
-        elif "media.class" in obj and obj["media.class"] in (
-            "Audio/Source", "Audio/Sink", "Video/Source", "Video/Sink"
-        ):
-            obj["object.pwtype"] = "portgroup"
+                obj['port.type'] = "midi"
+        elif obj["object.pwtype"] == "portgroup":
             device = info.get(obj['device.id'])
             groups = device.setdefault("node.portgroups", [])
             groups.append(obj_id)
-        elif "link.output.port" in obj:
-            obj["object.pwtype"] = "link"
+        elif obj["object.pwtype"] == "link":
             outport = info.get(obj["link.output.port"])
             links = outport.setdefault("port.links_in", [])
             links.append(obj_id)

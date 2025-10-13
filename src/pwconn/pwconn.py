@@ -516,17 +516,29 @@ class PWConnApp(App):
         )
 
         in_ports = [
-            p for p in ports if "in" in p.get("port.direction")
+            p for p in ports
+            if (
+                "in" in p.get("port.direction")
+                and (not device_type or (device_type == p.get("port.type")))
+            )
         ]
         in_desc = f"{len(in_ports)} in" if len(in_ports) else ""
         out_ports = [
             p for p in ports
-            if "out" in p.get("port.direction") and not p.get("port.monitor") == "true"
+            if (
+                "out" in p.get("port.direction")
+                and not p.get("port.monitor") == "true"
+                and (not device_type or (device_type == p.get("port.type")))
+            )
         ]
         out_desc = f"{len(out_ports)} out" if len(out_ports) else ""
         mon_ports = [
             p for p in ports
-            if "out" in p.get("port.direction") and p.get("port.monitor") == "true"
+            if (
+                "out" in p.get("port.direction")
+                and p.get("port.monitor") == "true"
+                and (not device_type or device_type == p.get("port.type"))
+            )
         ]
         mon_desc = f"{len(mon_ports)} mon" if len(mon_ports) else ""
         port_desc = f"({'/'.join([f for f in (in_desc, out_desc, mon_desc) if f])})"
