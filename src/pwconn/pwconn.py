@@ -71,6 +71,7 @@ class PWConnApp(App):
         ("m", "filter_midi", "ALSA MIDI"),
         ("j", "filter_jack_midi", "JACK MIDI"),
         ("v", "filter_video", "Video"),
+        ("t", "top", "Show pw-top"),
         ("r", "refresh", "Refresh"),
         ("q", "quit", "Quit")
     ]
@@ -86,6 +87,9 @@ class PWConnApp(App):
 
         self.list_items = []
         self.list_selection = 0
+
+        self.top_thread = None
+        self.top_lines = ""
 
         self.pw_info = None
         self.alsa_info = None
@@ -119,6 +123,13 @@ class PWConnApp(App):
 
         elif self.media_type == "video" and self.pw_info:
             content.append(self.render_video())
+
+        elif self.media_type == "top":
+            content.append(self.render_pw_top())
+
+        if self.media_type != "top" and self.top_thread:
+            self.top_thread.join()
+            self.top_thread = None
 
         content.append(self.render_keys_footer())
         yield Container(
@@ -193,7 +204,10 @@ class PWConnApp(App):
 
         if need_refresh:
             await self.recompose()
-            self.query_one(ListView).focus()
+            try:
+                self.query_one(ListView).focus()
+            except:
+                pass
 
     async def on_list_view_highlighted(self, highlight):
         for i, item in enumerate(self.list_items):
@@ -288,12 +302,13 @@ class PWConnApp(App):
 
     def render_media_header(self):
         labels = dict(
-            audio="Audio",
-            jack_midi="JACK MIDI",
-            alsa_midi="ALSA MIDI",
-            video="Video"
+            audio="Audio devices",
+            jack_midi="JACK MIDI devices",
+            alsa_midi="ALSA MIDI devices",
+            video="Video devices",
+            top="pw-top output",
         )
-        return Static(f"{labels.get(self.media_type)} devices", classes="title")
+        return Static(f"{labels.get(self.media_type)}", classes="title")
 
     def keys_footer_content(self):
         keys = [
@@ -338,6 +353,12 @@ class PWConnApp(App):
 
     def update_keys_footer(self):
         self.query_one(KeysFooter).update(self.keys_footer_content())
+
+    def update_top_lines(self):
+        try:
+            self.query_one(f"#top_lines").update(self.top_lines)
+        except:
+            pass
 
     def update_port_label(self, port):
         self.query_one(
@@ -620,6 +641,31 @@ class PWConnApp(App):
 
         return items
 
+    def render_pw_top(self):
+        import subprocess
+        import threading
+
+        def reader():
+            top = subprocess.Popen(
+                ['stdbuf', '-o0', 'pw-top', '-b'],
+                bufsize=0, text=True, stdout=subprocess.PIPE
+            )
+            top_lines = []
+            for next_line in top.stdout:
+                if not next_line or self.media_type != "top":
+                    break
+                if next_line.strip().endswith("NAME"):
+                    self.top_lines = "\n".join(top_lines)
+                    self.update_top_lines()
+                    top_lines = []
+                top_lines.append(next_line.strip())
+
+        if self.top_thread is None:
+            self.top_thread = threading.Thread(target=reader)
+            self.top_thread.start()
+
+        return Label(self.top_lines, id="top_lines")
+
     async def action_filter_audio(self):
         self.media_type = "audio"
         self.list_selection = 0
@@ -644,15 +690,27 @@ class PWConnApp(App):
         self.selected_ports = set()
         await self.redraw()
 
+    async def action_top(self):
+        self.media_type = "top"
+        await self.redraw()
+
     async def action_refresh(self):
         self.update_info()
         await self.redraw()
 
     async def redraw(self):
         await self.recompose()
-        self.query_one(ListView).focus()
+        try:
+            self.query_one(ListView).focus()
+        except:
+            pass
 
     def action_quit(self):
+        self.media_type = None
+        if self.top_thread:
+            self.top_thread.join()
+            self.top_thread = None
+
         self.exit()
 
 description = "pwconn - manage Pipewire connections via text UI"
