@@ -658,6 +658,7 @@ class PWConnApp(App):
                     self.top_lines = "\n".join(top_lines)
                     self.update_top_lines()
                     top_lines = []
+                    next_line = f"[on $panel][bold]{next_line.strip()}[/][/]"
                 top_lines.append(next_line.strip())
 
         if self.top_thread is None:
