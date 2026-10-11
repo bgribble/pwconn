@@ -97,6 +97,7 @@ def get_pw_info():
             }
         else:
             key, val = stripline.split(" = ")
+            val = val.replace("\\", "")
             current_obj[key] = json.loads(val)
 
     annotate_pw_info(info)
